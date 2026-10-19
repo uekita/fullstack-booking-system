@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Courier Shifts</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+    <h1>🛵 Courier Shifts</h1>
+    <nav>
+        <button class="tab active" data-tab="shifts" id="tab-shifts">Shifts</button>
+        <button class="tab" data-tab="couriers" id="tab-couriers">Couriers</button>
+        <button class="tab" data-tab="bookings" id="tab-bookings">Bookings</button>
+    </nav>
+</header>
+
+<div id="notification" class="notification hidden" role="alert"></div>
+
+<main>
+    <!-- SHIFTS -->
+    <section id="shifts-section" class="section">
+        <div class="section-header">
+            <h2>Shifts</h2>
+            <button id="new-shift-btn" class="primary">+ New shift</button>
+        </div>
+        <div class="filters">
+            <label for="shift-zone-filter">Zone</label>
+            <select id="shift-zone-filter">
+                <option value="">All zones</option>
+            </select>
+            <label class="inline"><input type="checkbox" id="shift-upcoming-filter" checked> Upcoming only</label>
+        </div>
+        <table id="shifts-table">
+            <thead>
+            <tr>
+                <th>ID</th><th>Zone</th><th>Start</th><th>End</th><th>Booked / Capacity</th><th>Status</th><th>Actions</th>
+            </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+        <p class="empty hidden" id="shifts-empty">No shifts found.</p>
+    </section>
+
+    <!-- COURIERS -->
+    <section id="couriers-section" class="section hidden">
+        <div class="section-header">
+            <h2>Couriers</h2>
+            <button id="new-courier-btn" class="primary">+ New courier</button>
+        </div>
+        <table id="couriers-table">
+            <thead>
+            <tr>
+                <th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Vehicle</th><th>Status</th><th>Actions</th>
+            </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+        <p class="empty hidden" id="couriers-empty">No couriers found.</p>
+    </section>
+
+    <!-- BOOKINGS -->
+    <section id="bookings-section" class="section hidden">
+        <div class="section-header">
+            <h2>Bookings</h2>
+        </div>
+        <div class="filters">
+            <label for="booking-courier-filter">Courier</label>
+            <select id="booking-courier-filter">
+                <option value="">All couriers</option>
+            </select>
+            <label for="booking-status-filter">Status</label>
+            <select id="booking-status-filter">
+                <option value="">All</option>
+                <option value="CONFIRMED">Confirmed</option>
+                <option value="CANCELLED">Cancelled</option>
+            </select>
+        </div>
+        <table id="bookings-table">
+            <thead>
+            <tr>
+                <th>ID</th><th>Courier</th><th>Shift</th><th>Zone</th><th>Shift time</th><th>Status</th><th>Booked at</th><th>Actions</th>
+            </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+        <p class="empty hidden" id="bookings-empty">No bookings found.</p>
+    </section>
+</main>
+
+<!-- SHIFT FORM -->
+<dialog id="shift-dialog">
+    <form id="shift-form" method="dialog">
+        <h3 id="shift-form-title">New shift</h3>
+        <input type="hidden" id="shift-id">
+        <label for="shift-zone">Zone</label>
+        <select id="shift-zone" name="zone" required></select>
+        <label for="shift-start">Start</label>
+        <input type="datetime-local" id="shift-start" name="startTime" required>
+        <label for="shift-end">End</label>
+        <input type="datetime-local" id="shift-end" name="endTime" required>
+        <label for="shift-capacity">Capacity</label>
+        <input type="number" id="shift-capacity" name="capacity" min="1" max="50" required>
+        <div class="dialog-actions">
+            <button type="button" class="secondary" data-close>Cancel</button>
+            <button type="submit" class="primary" id="shift-save-btn">Save</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- COURIER FORM -->
+<dialog id="courier-dialog">
+    <form id="courier-form" method="dialog">
+        <h3 id="courier-form-title">New courier</h3>
+        <input type="hidden" id="courier-id">
+        <label for="courier-name">Name</label>
+        <input type="text" id="courier-name" name="name" required>
+        <label for="courier-email">Email</label>
+        <input type="email" id="courier-email" name="email" required>
+        <label for="courier-phone">Phone</label>
+        <input type="tel" id="courier-phone" name="phone" placeholder="+1-555-0100" required>
+        <label for="courier-vehicle">Vehicle type</label>
+        <select id="courier-vehicle" name="vehicleType" required></select>
+        <label class="inline"><input type="checkbox" id="courier-active" name="active" checked> Active</label>
+        <div class="dialog-actions">
+            <button type="button" class="secondary" data-close>Cancel</button>
+            <button type="submit" class="primary" id="courier-save-btn">Save</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- BOOK SHIFT -->
+<dialog id="book-dialog">
+    <form id="book-form" method="dialog">
+        <h3>Book shift</h3>
+        <p id="book-shift-summary"></p>
+        <input type="hidden" id="book-shift-id">
+        <label for="book-courier">Courier</label>
+        <select id="book-courier" name="courierId" required></select>
+        <h4>Current bookings</h4>
+        <ul id="book-shift-bookings"></ul>
+        <div class="dialog-actions">
+            <button type="button" class="secondary" data-close>Close</button>
+            <button type="submit" class="primary" id="book-confirm-btn">Book</button>
+        </div>
+    </form>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>

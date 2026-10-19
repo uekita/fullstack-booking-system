@@ -1,0 +1,48 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: courier-shifts-db
+    environment:
+      POSTGRES_DB: courier_shifts
+      POSTGRES_USER: courier
+      POSTGRES_PASSWORD: courier
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U courier -d courier_shifts"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    container_name: courier-shifts-backend
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/courier_shifts
+      DB_USER: courier
+      DB_PASSWORD: courier
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8080/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
+  frontend:
+    build: ./frontend
+    container_name: courier-shifts-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  db-data:
