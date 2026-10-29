@@ -1,6 +1,6 @@
 # 🛵 Courier Shifts – Booking System
 
-A small full-stack app that lets a delivery company manage **courier shifts**: create couriers, publish shifts per delivery zone, and let couriers book or cancel those shifts.
+A small full-stack app that lets a delivery company manage **courier shifts**: create couriers, publish shifts per delivery zone, and let couriers book, reschedule or cancel those shifts.
 
 It was built as the **system under test for a Senior Quality Engineer technical exercise**. The app has no automated tests on purpose. Your job is to write them.
 
@@ -118,6 +118,16 @@ Cancelling:
 - Only `CONFIRMED` bookings can be cancelled, and only **before the shift starts**
 - A cancelled booking frees up the slot, and the courier can book the same shift again
 
+Rescheduling:
+- Only `CONFIRMED` bookings can be rescheduled
+- The booking and the target shift must exist
+- The target shift must be **different from the current shift**
+- The courier must be **active**
+- The target shift must **not have started**
+- The courier must have no **other** confirmed booking that overlaps the target shift. The booking being moved is **excluded** from the overlap check
+- The target shift must **not be full**
+- The booking keeps its identity: the same booking is moved to the new shift, the old slot is freed and the new slot is taken. No new booking row is created and `createdAt` is unchanged
+
 ---
 
 ## REST API
@@ -145,6 +155,7 @@ Base URL: `http://localhost:8080/api`. All bodies are JSON and all timestamps ar
 | GET    | `/bookings/{id}`              | Get booking                                   |
 | POST   | `/bookings`                   | Book a shift → `201`                          |
 | POST   | `/bookings/{id}/cancel`       | Cancel a booking                              |
+| POST   | `/bookings/{id}/reschedule`   | Move a confirmed booking to another shift    |
 
 Full schemas are in **Swagger UI**.
 
@@ -168,6 +179,11 @@ curl -s -X POST http://localhost:8080/api/bookings \
 
 # Cancel booking 1
 curl -s -X POST http://localhost:8080/api/bookings/1/cancel
+
+# Reschedule booking 1 to shift 7
+curl -s -X POST http://localhost:8080/api/bookings/1/reschedule \
+  -H 'Content-Type: application/json' \
+  -d '{"shiftId":7}'
 ```
 
 ### Error format
@@ -202,7 +218,11 @@ Open http://localhost:3000. Three tabs:
 
 - **Shifts**: list shifts (filter by zone and upcoming only), create, edit, delete, and **Book** a shift for an active courier
 - **Couriers**: list, create, edit (including activating or deactivating), delete, and jump to a courier's bookings
-- **Bookings**: list bookings (filter by courier and status) and cancel them
+- **Bookings**: list bookings (filter by courier and status), reschedule confirmed future bookings, and cancel them
+
+The reschedule dialog uses a searchable shift picker (a custom ARIA combobox, not a native `<select>`).
+It loads upcoming shifts asynchronously, excludes the booking's current shift, shows full shifts as
+disabled, filters by shift id or zone, and supports keyboard navigation.
 
 Success and error messages from the API appear as a notification in the top-right corner. Times are shown and entered in the **browser's local timezone** and sent to the API as UTC.
 

@@ -3,6 +3,7 @@ package com.delivery.shifts.web;
 import com.delivery.shifts.domain.BookingStatus;
 import com.delivery.shifts.dto.BookingRequest;
 import com.delivery.shifts.dto.BookingResponse;
+import com.delivery.shifts.dto.RescheduleRequest;
 import com.delivery.shifts.service.BookingService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -43,5 +44,11 @@ public class BookingController {
     @PostMapping("/{id}/cancel")
     public BookingResponse cancel(@PathVariable Long id) {
         return bookingService.cancel(id);
+    }
+
+    @PostMapping("/{id}/reschedule")
+    public BookingResponse reschedule(@PathVariable Long id,
+                                      @Valid @RequestBody RescheduleRequest request) {
+        return bookingService.reschedule(id, request);
     }
 }

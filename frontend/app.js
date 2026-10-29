@@ -293,6 +293,7 @@ async function loadBookings() {
         const tbody = document.querySelector('#bookings-table tbody');
         tbody.innerHTML = bookings.map((b) => {
             const cancellable = b.status === 'CONFIRMED' && new Date(b.shiftStart) > now;
+            const reschedulable = b.status === 'CONFIRMED' && new Date(b.shiftStart) > now;
             return `
             <tr data-id="${b.id}">
                 <td>${b.id}</td>
@@ -303,12 +304,15 @@ async function loadBookings() {
                 <td>${badge(b.status)}</td>
                 <td>${fmt(b.createdAt)}</td>
                 <td class="actions">
+                    <button data-action="reschedule" ${reschedulable ? '' : 'disabled'}>Reschedule</button>
                     <button class="danger" data-action="cancel" ${cancellable ? '' : 'disabled'}>Cancel</button>
                 </td>
             </tr>`;
         }).join('');
         toggleEmpty('bookings-empty', bookings.length === 0);
         tbody.querySelectorAll('tr').forEach((tr) => {
+            const booking = bookings.find((b) => b.id === Number(tr.dataset.id));
+            tr.querySelector('[data-action="reschedule"]').onclick = () => openRescheduleDialog(booking);
             tr.querySelector('[data-action="cancel"]').onclick = () => cancelBooking(Number(tr.dataset.id));
         });
     } catch (e) {
@@ -326,6 +330,202 @@ async function cancelBooking(id) {
         notify(e.message, 'error');
     }
 }
+
+// ---------- reschedule ----------
+const rescheduleState = {
+    booking: null,
+    shifts: [],
+    filtered: [],
+    selectedId: null,
+    activeIndex: -1,
+};
+
+let rescheduleFilterTimer;
+
+function collapseShiftList() {
+    document.getElementById('reschedule-shift-list').classList.add('hidden');
+    document.getElementById('reschedule-shift-search').setAttribute('aria-expanded', 'false');
+}
+
+async function openRescheduleDialog(booking) {
+    clearTimeout(rescheduleFilterTimer);
+    rescheduleFilterTimer = null;
+    rescheduleState.booking = booking;
+    rescheduleState.shifts = [];
+    rescheduleState.filtered = [];
+    rescheduleState.selectedId = null;
+    rescheduleState.activeIndex = -1;
+
+    document.getElementById('reschedule-summary').textContent =
+        `#${booking.id} · ${booking.courierName} · currently #${booking.shiftId} (${booking.zone})`;
+    const input = document.getElementById('reschedule-shift-search');
+    input.value = '';
+    input.setAttribute('aria-expanded', 'false');
+    input.removeAttribute('aria-activedescendant');
+    document.getElementById('reschedule-confirm-btn').disabled = true;
+
+    const list = document.getElementById('reschedule-shift-list');
+    list.classList.remove('hidden');
+    list.innerHTML = '<li class="combobox-status">Loading shifts…</li>';
+    document.getElementById('reschedule-dialog').showModal();
+
+    try {
+        const shifts = await api(`/shifts?from=${encodeURIComponent(new Date().toISOString())}`);
+        if (rescheduleState.booking !== booking) return;
+        rescheduleState.shifts = shifts.filter((s) => s.id !== booking.shiftId);
+        rescheduleState.filtered = rescheduleState.shifts;
+        renderShiftOptions();
+    } catch (e) {
+        list.innerHTML = '<li class="combobox-status">Could not load shifts</li>';
+        notify(e.message, 'error');
+    }
+}
+
+function renderShiftOptions() {
+    const list = document.getElementById('reschedule-shift-list');
+    const input = document.getElementById('reschedule-shift-search');
+    const selectable = rescheduleState.filtered.filter((s) => s.availableSlots > 0);
+    const activeShift = rescheduleState.activeIndex >= 0 ? selectable[rescheduleState.activeIndex] : null;
+
+    if (!rescheduleState.filtered.length) {
+        list.innerHTML = '<li class="combobox-status">No shifts match</li>';
+        list.classList.remove('hidden');
+        input.setAttribute('aria-expanded', 'true');
+        input.removeAttribute('aria-activedescendant');
+        return;
+    }
+
+    list.innerHTML = rescheduleState.filtered.map((s) => {
+        const disabled = s.availableSlots <= 0;
+        const active = activeShift !== null && activeShift.id === s.id;
+        return `
+            <li role="option"
+                id="reschedule-option-${s.id}"
+                data-shift-id="${s.id}"
+                aria-selected="${rescheduleState.selectedId === s.id}"
+                aria-disabled="${disabled}"
+                class="combobox-option${disabled ? ' disabled' : ''}${active ? ' active' : ''}">
+                #${s.id} · ${escapeHtml(s.zone)} · ${fmt(s.startTime)}–${fmt(s.endTime)} ·
+                ${disabled ? 'Full' : `${s.availableSlots} slot(s)`}
+            </li>`;
+    }).join('');
+
+    list.classList.remove('hidden');
+    input.setAttribute('aria-expanded', 'true');
+    if (activeShift !== null) {
+        input.setAttribute('aria-activedescendant', `reschedule-option-${activeShift.id}`);
+    } else {
+        input.removeAttribute('aria-activedescendant');
+    }
+    list.querySelectorAll('[role="option"]').forEach((li) => {
+        li.addEventListener('click', () => selectShiftOption(Number(li.dataset.shiftId)));
+    });
+}
+
+function selectShiftOption(id) {
+    const shift = rescheduleState.shifts.find((s) => s.id === id);
+    if (!shift || shift.availableSlots <= 0) return;
+
+    rescheduleState.selectedId = id;
+    rescheduleState.activeIndex = -1;
+    const input = document.getElementById('reschedule-shift-search');
+    input.value = `#${shift.id} · ${shift.zone} · ${fmt(shift.startTime)}–${fmt(shift.endTime)}`;
+    input.removeAttribute('aria-activedescendant');
+    document.querySelectorAll('#reschedule-shift-list .combobox-option.active')
+        .forEach((el) => el.classList.remove('active'));
+    collapseShiftList();
+    document.getElementById('reschedule-confirm-btn').disabled = false;
+}
+
+function applyShiftFilter() {
+    const term = document.getElementById('reschedule-shift-search').value.trim().toLowerCase();
+    rescheduleState.filtered = rescheduleState.shifts.filter((s) =>
+        String(s.id).includes(term) || s.zone.toLowerCase().includes(term));
+    rescheduleState.activeIndex = -1;
+    renderShiftOptions();
+}
+
+document.getElementById('reschedule-shift-search').addEventListener('input', () => {
+    clearTimeout(rescheduleFilterTimer);
+    rescheduleState.selectedId = null;
+    rescheduleState.activeIndex = -1;
+    document.getElementById('reschedule-confirm-btn').disabled = true;
+
+    rescheduleFilterTimer = setTimeout(() => {
+        rescheduleFilterTimer = null;
+        applyShiftFilter();
+    }, 250);
+});
+
+document.getElementById('reschedule-shift-search').addEventListener('keydown', (e) => {
+    // Apply a pending debounced filter immediately so a fast ArrowDown/Enter cannot select
+    // an option from the previous, stale result list.
+    if (rescheduleFilterTimer) {
+        clearTimeout(rescheduleFilterTimer);
+        rescheduleFilterTimer = null;
+        applyShiftFilter();
+    }
+
+    const list = document.getElementById('reschedule-shift-list');
+    const options = rescheduleState.filtered.filter((s) => s.availableSlots > 0);
+
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        if (!options.length) return;
+        e.preventDefault();
+        const delta = e.key === 'ArrowDown' ? 1 : -1;
+        if (rescheduleState.activeIndex < 0) {
+            rescheduleState.activeIndex = delta > 0 ? 0 : options.length - 1;
+        } else {
+            rescheduleState.activeIndex =
+                (rescheduleState.activeIndex + delta + options.length) % options.length;
+        }
+        renderShiftOptions();
+        const active = options[rescheduleState.activeIndex];
+        const el = list.querySelector(`[data-shift-id="${active.id}"]`);
+        if (el) el.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+        if (rescheduleState.activeIndex < 0 || !options.length) return;
+        e.preventDefault();
+        selectShiftOption(options[rescheduleState.activeIndex].id);
+    } else if (e.key === 'Escape' && !list.classList.contains('hidden')) {
+        e.preventDefault();
+        e.stopPropagation();
+        collapseShiftList();
+    }
+});
+
+function openShiftList() {
+    document.getElementById('reschedule-shift-list').classList.remove('hidden');
+    document.getElementById('reschedule-shift-search').setAttribute('aria-expanded', 'true');
+}
+
+document.getElementById('reschedule-shift-search').addEventListener('focus', openShiftList);
+document.getElementById('reschedule-shift-search').addEventListener('click', openShiftList);
+
+document.getElementById('reschedule-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (rescheduleState.selectedId == null) return;
+
+    const btn = document.getElementById('reschedule-confirm-btn');
+    btn.disabled = true;
+
+    try {
+        await api(`/bookings/${rescheduleState.booking.id}/reschedule`, {
+            method: 'POST',
+            body: JSON.stringify({ shiftId: rescheduleState.selectedId }),
+        });
+        document.getElementById('reschedule-dialog').close();
+        notify('Booking rescheduled');
+        loadBookings();
+    } catch (err) {
+        notify(err.message, 'error');
+        btn.disabled = false;
+    }
+});
+
+document.getElementById('reschedule-dialog').addEventListener('close', () => {
+    rescheduleState.booking = null;
+});
 
 document.getElementById('booking-courier-filter').addEventListener('change', loadBookings);
 document.getElementById('booking-status-filter').addEventListener('change', loadBookings);

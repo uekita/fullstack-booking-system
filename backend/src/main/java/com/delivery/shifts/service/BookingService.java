@@ -6,6 +6,7 @@ import com.delivery.shifts.domain.Courier;
 import com.delivery.shifts.domain.Shift;
 import com.delivery.shifts.dto.BookingRequest;
 import com.delivery.shifts.dto.BookingResponse;
+import com.delivery.shifts.dto.RescheduleRequest;
 import com.delivery.shifts.exception.BusinessRuleException;
 import com.delivery.shifts.exception.NotFoundException;
 import com.delivery.shifts.repository.BookingRepository;
@@ -82,6 +83,42 @@ public class BookingService {
         }
 
         return BookingResponse.from(bookingRepository.save(new Booking(courier, shift)));
+    }
+
+    @Transactional
+    public BookingResponse reschedule(Long bookingId, RescheduleRequest req) {
+        Instant now = clock.instant();
+
+        Booking booking = bookingRepository.findByIdForUpdate(bookingId)
+                .orElseThrow(() -> new NotFoundException("Booking", bookingId));
+        Shift target = shiftRepository.findByIdForUpdate(req.shiftId())
+                .orElseThrow(() -> new NotFoundException("Shift", req.shiftId()));
+
+        if (booking.getStatus() == BookingStatus.CANCELLED) {
+            throw new BusinessRuleException("Booking is cancelled and cannot be rescheduled");
+        }
+        if (booking.getShift().getId().equals(target.getId())) {
+            throw new BusinessRuleException("Booking is already on this shift");
+        }
+        if (!booking.getCourier().isActive()) {
+            throw new BusinessRuleException("Courier is inactive and cannot book shifts");
+        }
+        if (target.hasStarted(now)) {
+            throw new BusinessRuleException("Shift has already started and can no longer be booked");
+        }
+
+        if (bookingRepository.courierHasOverlappingBooking(
+                booking.getCourier().getId(), target.getStartTime(), target.getEndTime())) {
+            throw new BusinessRuleException("Courier already has a booking that overlaps with this shift");
+        }
+
+        long booked = bookingRepository.countByShiftIdAndStatus(target.getId(), BookingStatus.CONFIRMED);
+        if (booked >= target.getCapacity()) {
+            throw new BusinessRuleException("Shift is full");
+        }
+
+        booking.reschedule(target);
+        return BookingResponse.from(booking);
     }
 
     @Transactional

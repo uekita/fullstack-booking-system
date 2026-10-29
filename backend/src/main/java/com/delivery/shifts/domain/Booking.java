@@ -51,6 +51,10 @@ public class Booking {
         this.cancelledAt = now;
     }
 
+    public void reschedule(Shift newShift) {
+        this.shift = newShift;
+    }
+
     public Long getId() { return id; }
     public Courier getCourier() { return courier; }
     public Shift getShift() { return shift; }
