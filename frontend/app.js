@@ -367,14 +367,16 @@ async function openRescheduleDialog(booking) {
     const list = document.getElementById('reschedule-shift-list');
     list.classList.remove('hidden');
     list.innerHTML = '<li class="combobox-status">Loading shifts…</li>';
+    input.setAttribute('aria-expanded', 'true');
     document.getElementById('reschedule-dialog').showModal();
 
     try {
         const shifts = await api(`/shifts?from=${encodeURIComponent(new Date().toISOString())}`);
         if (rescheduleState.booking !== booking) return;
         rescheduleState.shifts = shifts.filter((s) => s.id !== booking.shiftId);
-        rescheduleState.filtered = rescheduleState.shifts;
-        renderShiftOptions();
+        // The user may have typed while the list was loading: apply the current search term instead of
+        // overwriting it with the full list, otherwise the visible filter and the results disagree.
+        applyShiftFilter();
     } catch (e) {
         list.innerHTML = '<li class="combobox-status">Could not load shifts</li>';
         notify(e.message, 'error');
@@ -431,16 +433,20 @@ function selectShiftOption(id) {
     const input = document.getElementById('reschedule-shift-search');
     input.value = `#${shift.id} · ${shift.zone} · ${fmt(shift.startTime)}–${fmt(shift.endTime)}`;
     input.removeAttribute('aria-activedescendant');
-    document.querySelectorAll('#reschedule-shift-list .combobox-option.active')
-        .forEach((el) => el.classList.remove('active'));
+    document.querySelectorAll('#reschedule-shift-list [role="option"]').forEach((el) => {
+        el.setAttribute('aria-selected', String(Number(el.dataset.shiftId) === id));
+        el.classList.remove('active');
+    });
     collapseShiftList();
     document.getElementById('reschedule-confirm-btn').disabled = false;
 }
 
 function applyShiftFilter() {
     const term = document.getElementById('reschedule-shift-search').value.trim().toLowerCase();
+    // The options are labelled "#<id>", so accept both "123" and "#123".
+    const idTerm = term.startsWith('#') ? term.slice(1) : term;
     rescheduleState.filtered = rescheduleState.shifts.filter((s) =>
-        String(s.id).includes(term) || s.zone.toLowerCase().includes(term));
+        String(s.id).includes(idTerm) || s.zone.toLowerCase().includes(term));
     rescheduleState.activeIndex = -1;
     renderShiftOptions();
 }
