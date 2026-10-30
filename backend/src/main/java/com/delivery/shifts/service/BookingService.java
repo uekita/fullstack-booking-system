@@ -44,10 +44,15 @@ public class BookingService {
     @Transactional(readOnly = true)
     public List<BookingResponse> list(Long courierId, Long shiftId, BookingStatus status) {
         Specification<Booking> spec = (root, q, cb) -> cb.conjunction();
+        // An unknown id is a 404, as on /couriers/{id}/bookings and /shifts/{id}/bookings, not an empty list.
         if (courierId != null) {
+            courierService.find(courierId);
             spec = spec.and((root, q, cb) -> cb.equal(root.get("courier").get("id"), courierId));
         }
         if (shiftId != null) {
+            if (!shiftRepository.existsById(shiftId)) {
+                throw new NotFoundException("Shift", shiftId);
+            }
             spec = spec.and((root, q, cb) -> cb.equal(root.get("shift").get("id"), shiftId));
         }
         if (status != null) {

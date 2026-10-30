@@ -150,19 +150,24 @@ Base URL: `http://localhost:8080/api`. All bodies are JSON and all timestamps ar
 | PUT    | `/couriers/{id}`              | Update courier                                |
 | DELETE | `/couriers/{id}`              | Delete courier → `204`                        |
 | GET    | `/couriers/{id}/bookings`     | Bookings of a courier                         |
-| GET    | `/shifts?zone=&from=&to=`     | List shifts (filter by zone / start time range) |
+| GET    | `/shifts?zone=&from=&to=&endAfter=` | List shifts (filter by zone / start time range / end time, see below) |
 | GET    | `/shifts/{id}`                | Get shift                                     |
 | POST   | `/shifts`                     | Create shift → `201`                          |
 | PUT    | `/shifts/{id}`                | Update shift                                  |
 | DELETE | `/shifts/{id}`                | Delete shift → `204`                          |
 | GET    | `/shifts/{id}/bookings`       | Bookings of a shift                           |
-| GET    | `/bookings?courierId=&shiftId=&status=` | List bookings                       |
+| GET    | `/bookings?courierId=&shiftId=&status=` | List bookings; an unknown `courierId` or `shiftId` → `404` |
 | GET    | `/bookings/{id}`              | Get booking                                   |
 | POST   | `/bookings`                   | Book a shift → `201`                          |
 | POST   | `/bookings/{id}/cancel`       | Cancel a booking                              |
 | POST   | `/bookings/{id}/reschedule`   | Move a confirmed booking to another shift    |
 
 Full schemas are in **Swagger UI**.
+
+Shift list filters (all optional, combined with AND):
+- `zone`: one zone
+- `from` / `to`: the shift **starts** at or after `from` / at or before `to`. `from=<now>` lists shifts that have not started, i.e. shifts that can still be booked
+- `endAfter`: the shift **ends** after this instant. `endAfter=<now>` lists shifts that have not finished, including those in progress
 
 ### Examples
 
@@ -225,7 +230,7 @@ a number is expected). Broken JSON answers `"Malformed request body"` without `f
 
 Open http://localhost:3000. Three tabs:
 
-- **Shifts**: list shifts (filter by zone and upcoming only), create, edit, delete, and **Book** a shift for an active courier
+- **Shifts**: list shifts (filter by zone and "Upcoming only", which hides finished shifts but keeps those in progress), create, edit, delete, and **Book** a shift for an active courier. Editing a shift sends its times unchanged (to the second) unless you edit them
 - **Couriers**: list, create, edit (including activating or deactivating), delete, and jump to a courier's bookings
 - **Bookings**: list bookings (filter by courier and status), reschedule confirmed future bookings, and cancel them
 

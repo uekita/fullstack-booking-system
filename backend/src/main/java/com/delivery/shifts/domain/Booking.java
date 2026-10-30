@@ -3,6 +3,7 @@ package com.delivery.shifts.domain;
 import jakarta.persistence.*;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 @Entity
 @Table(name = "bookings")
@@ -42,7 +43,8 @@ public class Booking {
     @PrePersist
     void prePersist() {
         if (createdAt == null) {
-            createdAt = Instant.now();
+            // Microseconds: the precision PostgreSQL stores, so the create response matches later reads.
+            createdAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
         }
     }
 

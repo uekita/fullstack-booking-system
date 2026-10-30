@@ -78,7 +78,8 @@ async function loadShifts() {
     const params = new URLSearchParams();
     const zone = document.getElementById('shift-zone-filter').value;
     if (zone) params.set('zone', zone);
-    if (document.getElementById('shift-upcoming-filter').checked) params.set('from', new Date().toISOString());
+    // "Upcoming" means not finished yet, so shifts in progress stay listed.
+    if (document.getElementById('shift-upcoming-filter').checked) params.set('endAfter', new Date().toISOString());
     try {
         const shifts = await api(`/shifts?${params}`);
         const tbody = document.querySelector('#shifts-table tbody');
@@ -115,10 +116,25 @@ function openShiftDialog(shift) {
     document.getElementById('shift-form-title').textContent = shift ? `Edit shift #${shift.id}` : 'New shift';
     document.getElementById('shift-id').value = shift ? shift.id : '';
     document.getElementById('shift-zone').value = shift ? shift.zone : state.meta.zones[0];
-    document.getElementById('shift-start').value = shift ? toLocalInput(shift.startTime) : '';
-    document.getElementById('shift-end').value = shift ? toLocalInput(shift.endTime) : '';
+    setTimeInput('shift-start', shift && shift.startTime);
+    setTimeInput('shift-end', shift && shift.endTime);
     document.getElementById('shift-capacity').value = shift ? shift.capacity : 1;
     document.getElementById('shift-dialog').showModal();
+}
+
+// datetime-local inputs hold minutes only. Remember the original instant so that a time the user did not touch is
+// sent back unchanged, seconds included; otherwise the API sees a time change on a booked shift and rejects the edit.
+function setTimeInput(id, iso) {
+    const input = document.getElementById(id);
+    input.value = iso ? toLocalInput(iso) : '';
+    input.dataset.originalValue = input.value;
+    input.dataset.originalIso = iso || '';
+}
+
+function timeInputToIso(id) {
+    const input = document.getElementById(id);
+    if (input.dataset.originalIso && input.value === input.dataset.originalValue) return input.dataset.originalIso;
+    return new Date(input.value).toISOString();
 }
 
 document.getElementById('shift-form').addEventListener('submit', async (e) => {
@@ -126,8 +142,8 @@ document.getElementById('shift-form').addEventListener('submit', async (e) => {
     const id = document.getElementById('shift-id').value;
     const payload = {
         zone: document.getElementById('shift-zone').value,
-        startTime: new Date(document.getElementById('shift-start').value).toISOString(),
-        endTime: new Date(document.getElementById('shift-end').value).toISOString(),
+        startTime: timeInputToIso('shift-start'),
+        endTime: timeInputToIso('shift-end'),
         capacity: Number(document.getElementById('shift-capacity').value),
     };
     try {
@@ -428,6 +444,9 @@ function selectShiftOption(id) {
     const shift = rescheduleState.shifts.find((s) => s.id === id);
     if (!shift || shift.availableSlots <= 0) return;
 
+    // A filter still pending from typing would run on the selected label below and reopen the list.
+    clearTimeout(rescheduleFilterTimer);
+    rescheduleFilterTimer = null;
     rescheduleState.selectedId = id;
     rescheduleState.activeIndex = -1;
     const input = document.getElementById('reschedule-shift-search');
