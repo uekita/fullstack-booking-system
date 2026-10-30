@@ -20,6 +20,11 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 
+/**
+ * Every write locks rows in the same order, courier → booking → shift, so concurrent requests cannot deadlock.
+ * The courier lock serialises all booking changes of one courier, which is what keeps the overlap rule true under
+ * concurrent requests; the shift lock does the same for capacity.
+ */
 @Service
 public class BookingService {
 
@@ -61,7 +66,7 @@ public class BookingService {
     @Transactional
     public BookingResponse create(BookingRequest req) {
         Instant now = clock.instant();
-        Courier courier = courierService.find(req.courierId());
+        Courier courier = courierService.findForUpdate(req.courierId());
         Shift shift = shiftRepository.findByIdForUpdate(req.shiftId())
                 .orElseThrow(() -> new NotFoundException("Shift", req.shiftId()));
 
@@ -89,13 +94,15 @@ public class BookingService {
     public BookingResponse reschedule(Long bookingId, RescheduleRequest req) {
         Instant now = clock.instant();
 
-        Booking booking = bookingRepository.findByIdForUpdate(bookingId)
-                .orElseThrow(() -> new NotFoundException("Booking", bookingId));
+        Booking booking = lockWithCourier(bookingId);
         Shift target = shiftRepository.findByIdForUpdate(req.shiftId())
                 .orElseThrow(() -> new NotFoundException("Shift", req.shiftId()));
 
         if (booking.getStatus() == BookingStatus.CANCELLED) {
             throw new BusinessRuleException("Booking is cancelled and cannot be rescheduled");
+        }
+        if (booking.getShift().hasStarted(now)) {
+            throw new BusinessRuleException("Shift has already started; booking can no longer be rescheduled");
         }
         if (booking.getShift().getId().equals(target.getId())) {
             throw new BusinessRuleException("Booking is already on this shift");
@@ -107,8 +114,8 @@ public class BookingService {
             throw new BusinessRuleException("Shift has already started and can no longer be booked");
         }
 
-        if (bookingRepository.courierHasOverlappingBooking(
-                booking.getCourier().getId(), target.getStartTime(), target.getEndTime())) {
+        if (bookingRepository.courierHasOtherOverlappingBooking(
+                booking.getCourier().getId(), booking.getId(), target.getStartTime(), target.getEndTime())) {
             throw new BusinessRuleException("Courier already has a booking that overlaps with this shift");
         }
 
@@ -124,7 +131,7 @@ public class BookingService {
     @Transactional
     public BookingResponse cancel(Long id) {
         Instant now = clock.instant();
-        Booking booking = find(id);
+        Booking booking = lockWithCourier(id);
         if (booking.getStatus() == BookingStatus.CANCELLED) {
             throw new BusinessRuleException("Booking is already cancelled");
         }
@@ -137,5 +144,17 @@ public class BookingService {
 
     private Booking find(Long id) {
         return bookingRepository.findById(id).orElseThrow(() -> new NotFoundException("Booking", id));
+    }
+
+    /**
+     * Locks the booking's courier, then the booking. The courier id is read with a scalar query rather than by
+     * loading the booking: an entity loaded before its lock would stay in the persistence context with stale state.
+     */
+    private Booking lockWithCourier(Long bookingId) {
+        Long courierId = bookingRepository.findCourierIdById(bookingId)
+                .orElseThrow(() -> new NotFoundException("Booking", bookingId));
+        courierService.findForUpdate(courierId);
+        return bookingRepository.findByIdForUpdate(bookingId)
+                .orElseThrow(() -> new NotFoundException("Booking", bookingId));
     }
 }

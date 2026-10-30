@@ -112,7 +112,10 @@ A courier can book a shift only if **all** of these hold:
 2. The shift exists and **has not started**
 3. The courier doesn't already have a confirmed booking on **this shift**
 4. The courier has no confirmed booking that **overlaps in time** with this shift
-5. The shift is **not full**. Capacity is enforced with a DB row lock, so it holds under concurrent requests.
+5. The shift is **not full**
+
+Capacity and the overlap rule are enforced with DB row locks (on the shift and on the courier), so they hold under
+concurrent requests, for booking, rescheduling and cancelling alike.
 
 Cancelling:
 - Only `CONFIRMED` bookings can be cancelled, and only **before the shift starts**
@@ -121,6 +124,7 @@ Cancelling:
 Rescheduling:
 - Only `CONFIRMED` bookings can be rescheduled
 - The booking and the target shift must exist
+- The booking's current shift must **not have started** (as for cancelling)
 - The target shift must be **different from the current shift**
 - The courier must be **active**
 - The target shift must **not have started**

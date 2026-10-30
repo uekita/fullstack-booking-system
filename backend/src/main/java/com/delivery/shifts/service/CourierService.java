@@ -76,6 +76,10 @@ public class CourierService {
         return courierRepository.findById(id).orElseThrow(() -> new NotFoundException("Courier", id));
     }
 
+    Courier findForUpdate(Long id) {
+        return courierRepository.findByIdForUpdate(id).orElseThrow(() -> new NotFoundException("Courier", id));
+    }
+
     private static void apply(Courier courier, CourierRequest req, String email) {
         courier.setName(req.name().trim());
         courier.setEmail(email);
