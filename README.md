@@ -1,6 +1,6 @@
 # 🛵 Courier Shifts – Booking System
 
-A small full-stack app that lets a delivery company manage **courier shifts**: create couriers, publish shifts per delivery zone, and let couriers book or cancel those shifts.
+A small full-stack app that lets a delivery company manage **courier shifts**: create couriers, publish shifts per delivery zone, and let couriers book, reschedule or cancel those shifts.
 
 It was built as the **system under test for a Senior Quality Engineer technical exercise**. The app has no automated tests on purpose. Your job is to write them.
 
@@ -89,11 +89,12 @@ Five shifts are created relative to the moment the DB was initialised: upcoming 
 ## Domain & business rules
 
 ### Couriers
-- `name` required, 2–100 chars
+- `name` required, 2–100 chars after trimming leading and trailing spaces
 - `email` required, valid format, **unique** (case-insensitive, stored lowercase)
-- `phone` required, 7–20 digits; may start with `+` and contain spaces or dashes
+- `phone` required, 7–20 digits; may start with `+` and contain spaces or dashes, which do not count as digits; at most 30 characters in total
 - `vehicleType` one of `BIKE`, `SCOOTER`, `CAR`
 - `active` defaults to `true`
+- **Deactivating** a courier cancels their confirmed bookings on shifts that **have not started yet**, freeing those slots. Bookings on started or past shifts are kept
 - A courier **with any booking history cannot be deleted**. Deactivate it instead.
 
 ### Shifts
@@ -112,11 +113,25 @@ A courier can book a shift only if **all** of these hold:
 2. The shift exists and **has not started**
 3. The courier doesn't already have a confirmed booking on **this shift**
 4. The courier has no confirmed booking that **overlaps in time** with this shift
-5. The shift is **not full**. Capacity is enforced with a DB row lock, so it holds under concurrent requests.
+5. The shift is **not full**
+
+Capacity and the overlap rule are enforced with DB row locks (on the shift and on the courier), so they hold under
+concurrent requests, for booking, rescheduling and cancelling alike.
 
 Cancelling:
 - Only `CONFIRMED` bookings can be cancelled, and only **before the shift starts**
 - A cancelled booking frees up the slot, and the courier can book the same shift again
+
+Rescheduling:
+- Only `CONFIRMED` bookings can be rescheduled
+- The booking and the target shift must exist
+- The booking's current shift must **not have started** (as for cancelling)
+- The target shift must be **different from the current shift**
+- The courier must be **active**
+- The target shift must **not have started**
+- The courier must have no **other** confirmed booking that overlaps the target shift. The booking being moved is **excluded** from the overlap check
+- The target shift must **not be full**
+- The booking keeps its identity: the same booking is moved to the new shift, the old slot is freed and the new slot is taken. No new booking row is created and `createdAt` is unchanged
 
 ---
 
@@ -135,18 +150,24 @@ Base URL: `http://localhost:8080/api`. All bodies are JSON and all timestamps ar
 | PUT    | `/couriers/{id}`              | Update courier                                |
 | DELETE | `/couriers/{id}`              | Delete courier → `204`                        |
 | GET    | `/couriers/{id}/bookings`     | Bookings of a courier                         |
-| GET    | `/shifts?zone=&from=&to=`     | List shifts (filter by zone / start time range) |
+| GET    | `/shifts?zone=&from=&to=&endAfter=` | List shifts (filter by zone / start time range / end time, see below) |
 | GET    | `/shifts/{id}`                | Get shift                                     |
 | POST   | `/shifts`                     | Create shift → `201`                          |
 | PUT    | `/shifts/{id}`                | Update shift                                  |
 | DELETE | `/shifts/{id}`                | Delete shift → `204`                          |
 | GET    | `/shifts/{id}/bookings`       | Bookings of a shift                           |
-| GET    | `/bookings?courierId=&shiftId=&status=` | List bookings                       |
+| GET    | `/bookings?courierId=&shiftId=&status=` | List bookings; an unknown `courierId` or `shiftId` → `404` |
 | GET    | `/bookings/{id}`              | Get booking                                   |
 | POST   | `/bookings`                   | Book a shift → `201`                          |
 | POST   | `/bookings/{id}/cancel`       | Cancel a booking                              |
+| POST   | `/bookings/{id}/reschedule`   | Move a confirmed booking to another shift    |
 
 Full schemas are in **Swagger UI**.
+
+Shift list filters (all optional, combined with AND):
+- `zone`: one zone
+- `from` / `to`: the shift **starts** at or after `from` / at or before `to`. `from=<now>` lists shifts that have not started, i.e. shifts that can still be booked
+- `endAfter`: the shift **ends** after this instant. `endAfter=<now>` lists shifts that have not finished, including those in progress
 
 ### Examples
 
@@ -168,6 +189,11 @@ curl -s -X POST http://localhost:8080/api/bookings \
 
 # Cancel booking 1
 curl -s -X POST http://localhost:8080/api/bookings/1/cancel
+
+# Reschedule booking 1 to shift 7
+curl -s -X POST http://localhost:8080/api/bookings/1/reschedule \
+  -H 'Content-Type: application/json' \
+  -d '{"shiftId":7}'
 ```
 
 ### Error format
@@ -184,14 +210,18 @@ Every error uses the same body:
   "fieldErrors": { "email": "must be a well-formed email address" }
 }
 ```
-`fieldErrors` is present only for bean-validation failures.
+`fieldErrors` is present only when `message` is `"Validation failed"`: a field breaks a validation rule, or a body
+field holds a value of the wrong type (e.g. an unknown enum constant such as `"vehicleType":"HELICOPTER"`, or text where
+a number is expected). Broken JSON answers `"Malformed request body"` without `fieldErrors`.
 
 | Status | When                                                                 |
 |--------|----------------------------------------------------------------------|
-| 400    | Validation failure, malformed JSON, invalid enum or param, bad time range |
+| 400    | Validation failure (incl. a wrong value type in a body field), malformed JSON, invalid query param, bad time range |
 | 404    | Resource not found                                                   |
 | 405    | HTTP method not supported                                            |
+| 406    | The `Accept` header allows no representation the API can produce (JSON) |
 | 409    | Business-rule violation (duplicate email, full shift, overlap, …)    |
+| 415    | Request body sent with a `Content-Type` other than `application/json` |
 | 500    | Unexpected error                                                     |
 
 ---
@@ -200,9 +230,13 @@ Every error uses the same body:
 
 Open http://localhost:3000. Three tabs:
 
-- **Shifts**: list shifts (filter by zone and upcoming only), create, edit, delete, and **Book** a shift for an active courier
+- **Shifts**: list shifts (filter by zone and "Upcoming only", which hides finished shifts but keeps those in progress), create, edit, delete, and **Book** a shift for an active courier. Editing a shift sends its times unchanged (to the second) unless you edit them
 - **Couriers**: list, create, edit (including activating or deactivating), delete, and jump to a courier's bookings
-- **Bookings**: list bookings (filter by courier and status) and cancel them
+- **Bookings**: list bookings (filter by courier and status), reschedule confirmed future bookings, and cancel them
+
+The reschedule dialog uses a searchable shift picker (a custom ARIA combobox, not a native `<select>`).
+It loads upcoming shifts asynchronously, excludes the booking's current shift, shows full shifts as
+disabled, filters by shift id or zone, and supports keyboard navigation.
 
 Success and error messages from the API appear as a notification in the top-right corner. Times are shown and entered in the **browser's local timezone** and sent to the API as UTC.
 

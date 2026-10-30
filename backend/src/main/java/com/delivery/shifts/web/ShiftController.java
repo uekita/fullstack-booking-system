@@ -32,8 +32,9 @@ public class ShiftController {
     public List<ShiftResponse> list(
             @RequestParam(required = false) Zone zone,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
-        return shiftService.list(zone, from, to);
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant endAfter) {
+        return shiftService.list(zone, from, to, endAfter);
     }
 
     @GetMapping("/{id}")

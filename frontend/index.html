@@ -6,7 +6,7 @@
     <title>Courier Shifts</title>
     <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body data-build="reschedule">
 <header>
     <h1>🛵 Courier Shifts</h1>
     <nav>
@@ -143,6 +143,32 @@
         <div class="dialog-actions">
             <button type="button" class="secondary" data-close>Close</button>
             <button type="submit" class="primary" id="book-confirm-btn">Book</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- RESCHEDULE BOOKING -->
+<dialog id="reschedule-dialog">
+    <form id="reschedule-form" method="dialog">
+        <h3>Reschedule booking</h3>
+        <p id="reschedule-summary"></p>
+
+        <label for="reschedule-shift-search">New shift</label>
+        <div class="combobox" id="reschedule-combobox">
+            <input type="text"
+                   id="reschedule-shift-search"
+                   role="combobox"
+                   aria-expanded="false"
+                   aria-controls="reschedule-shift-list"
+                   aria-autocomplete="list"
+                   autocomplete="off"
+                   placeholder="Search by zone or shift id">
+            <ul id="reschedule-shift-list" role="listbox" aria-label="Available shifts"></ul>
+        </div>
+
+        <div class="dialog-actions">
+            <button type="button" class="secondary" data-close>Cancel</button>
+            <button type="submit" class="primary" id="reschedule-confirm-btn" disabled>Reschedule</button>
         </div>
     </form>
 </dialog>

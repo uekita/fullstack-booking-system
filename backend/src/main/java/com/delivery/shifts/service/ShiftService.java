@@ -37,7 +37,7 @@ public class ShiftService {
     }
 
     @Transactional(readOnly = true)
-    public List<ShiftResponse> list(Zone zone, Instant from, Instant to) {
+    public List<ShiftResponse> list(Zone zone, Instant from, Instant to, Instant endAfter) {
         if (from != null && to != null && from.isAfter(to)) {
             throw new ValidationException("'from' must be before 'to'");
         }
@@ -50,6 +50,10 @@ public class ShiftService {
         }
         if (to != null) {
             spec = spec.and((root, q, cb) -> cb.lessThanOrEqualTo(root.get("startTime"), to));
+        }
+        // On the end time, unlike from/to: endAfter=<now> keeps shifts in progress (not finished yet).
+        if (endAfter != null) {
+            spec = spec.and((root, q, cb) -> cb.greaterThan(root.get("endTime"), endAfter));
         }
         Instant now = clock.instant();
         return shiftRepository.findAll(spec, Sort.by("startTime")).stream()
