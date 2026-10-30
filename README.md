@@ -89,9 +89,9 @@ Five shifts are created relative to the moment the DB was initialised: upcoming 
 ## Domain & business rules
 
 ### Couriers
-- `name` required, 2–100 chars
+- `name` required, 2–100 chars after trimming leading and trailing spaces
 - `email` required, valid format, **unique** (case-insensitive, stored lowercase)
-- `phone` required, 7–20 digits; may start with `+` and contain spaces or dashes
+- `phone` required, 7–20 digits; may start with `+` and contain spaces or dashes, which do not count as digits; at most 30 characters in total
 - `vehicleType` one of `BIKE`, `SCOOTER`, `CAR`
 - `active` defaults to `true`
 - **Deactivating** a courier cancels their confirmed bookings on shifts that **have not started yet**, freeing those slots. Bookings on started or past shifts are kept
