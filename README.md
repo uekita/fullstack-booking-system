@@ -205,14 +205,18 @@ Every error uses the same body:
   "fieldErrors": { "email": "must be a well-formed email address" }
 }
 ```
-`fieldErrors` is present only for bean-validation failures.
+`fieldErrors` is present only when `message` is `"Validation failed"`: a field breaks a validation rule, or a body
+field holds a value of the wrong type (e.g. an unknown enum constant such as `"vehicleType":"HELICOPTER"`, or text where
+a number is expected). Broken JSON answers `"Malformed request body"` without `fieldErrors`.
 
 | Status | When                                                                 |
 |--------|----------------------------------------------------------------------|
-| 400    | Validation failure, malformed JSON, invalid enum or param, bad time range |
+| 400    | Validation failure (incl. a wrong value type in a body field), malformed JSON, invalid query param, bad time range |
 | 404    | Resource not found                                                   |
 | 405    | HTTP method not supported                                            |
+| 406    | The `Accept` header allows no representation the API can produce (JSON) |
 | 409    | Business-rule violation (duplicate email, full shift, overlap, …)    |
+| 415    | Request body sent with a `Content-Type` other than `application/json` |
 | 500    | Unexpected error                                                     |
 
 ---
