@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 public interface BookingRepository extends JpaRepository<Booking, Long>, JpaSpecificationExecutor<Booking> {
@@ -22,6 +23,15 @@ public interface BookingRepository extends JpaRepository<Booking, Long>, JpaSpec
     /** The booking's courier id, without loading the booking: lets callers lock the courier before the booking. */
     @Query("select b.courier.id from Booking b where b.id = :id")
     Optional<Long> findCourierIdById(@Param("id") Long id);
+
+    /** Confirmed bookings of a courier whose shift starts after {@code now}, i.e. has not started yet. */
+    @Query("""
+            select b from Booking b
+            where b.courier.id = :courierId
+              and b.status = com.delivery.shifts.domain.BookingStatus.CONFIRMED
+              and b.shift.startTime > :now
+            """)
+    List<Booking> findConfirmedNotStartedByCourierId(@Param("courierId") Long courierId, @Param("now") Instant now);
 
     long countByShiftIdAndStatus(Long shiftId, BookingStatus status);
 

@@ -94,6 +94,7 @@ Five shifts are created relative to the moment the DB was initialised: upcoming 
 - `phone` required, 7–20 digits; may start with `+` and contain spaces or dashes
 - `vehicleType` one of `BIKE`, `SCOOTER`, `CAR`
 - `active` defaults to `true`
+- **Deactivating** a courier cancels their confirmed bookings on shifts that **have not started yet**, freeing those slots. Bookings on started or past shifts are kept
 - A courier **with any booking history cannot be deleted**. Deactivate it instead.
 
 ### Shifts

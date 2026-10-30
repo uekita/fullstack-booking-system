@@ -10,6 +10,8 @@ import com.delivery.shifts.repository.CourierRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 
@@ -18,10 +20,12 @@ public class CourierService {
 
     private final CourierRepository courierRepository;
     private final BookingRepository bookingRepository;
+    private final Clock clock;
 
-    public CourierService(CourierRepository courierRepository, BookingRepository bookingRepository) {
+    public CourierService(CourierRepository courierRepository, BookingRepository bookingRepository, Clock clock) {
         this.courierRepository = courierRepository;
         this.bookingRepository = bookingRepository;
+        this.clock = clock;
     }
 
     @Transactional(readOnly = true)
@@ -51,14 +55,21 @@ public class CourierService {
 
     @Transactional
     public CourierResponse update(Long id, CourierRequest req) {
-        Courier courier = find(id);
+        // Locked like every booking change of this courier, so no booking can slip in while deactivating.
+        Courier courier = findForUpdate(id);
         String email = normalizeEmail(req.email());
         if (courierRepository.existsByEmailIgnoreCaseAndIdNot(email, id)) {
             throw new BusinessRuleException("A courier with email " + email + " already exists");
         }
+        boolean deactivating = courier.isActive() && Boolean.FALSE.equals(req.active());
         apply(courier, req, email);
         if (req.active() != null) {
             courier.setActive(req.active());
+        }
+        if (deactivating) {
+            // An inactive courier cannot work future shifts: free their slots. Started and past bookings stay.
+            Instant now = clock.instant();
+            bookingRepository.findConfirmedNotStartedByCourierId(id, now).forEach(b -> b.cancel(now));
         }
         return CourierResponse.from(courier);
     }
